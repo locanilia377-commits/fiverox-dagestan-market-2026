@@ -23,7 +23,8 @@
 .sidebar{overflow-y:auto;overscroll-behavior:contain}.source-detail a,.public-evidence a,.research-card a{overflow-wrap:anywhere}
 
 @font-face{font-family:Onest;src:url("onest-crm.woff2") format("woff2");font-display:swap}body,button,input,select,textarea{font-family:Onest,Arial,sans-serif}.sidebar{background:#064c40}.btn.primary{background:#087d65}.brand{font-weight:850;letter-spacing:.04em}.brand span{font-size:10px}.scope-note{border-color:#b6daca;background:#edf8f1;color:#1e594c}
-</style><script>window.FIVEROX_PLATFORM_CONFIG=Object.freeze({"pilotEnabled": true, "backendUrl": "https://script.google.com/macros/s/AKfycbxPdtJu7-iORTMFyGb0I5xdvtYgacfaRodXpCGHNPwdvciox4xo2FJSBfQvdnzGae_Lxg/exec", "name": "FIVEROX · Дагестан · CRM", "organization": "FIVEROX"});</script><meta name="application-version" content="dagestan-crm-20261117-r13"><style>.geo-selector{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:22px}.geo-selector .meta{font-size:11px}.contact-block{overflow-wrap:anywhere}.toolbar{flex-wrap:wrap}.board{max-width:100%}</style><link rel="preconnect" href="https://script.google.com">
+</style><script>window.FIVEROX_PLATFORM_CONFIG=Object.freeze({"pilotEnabled": true, "backendUrl": "https://script.google.com/macros/s/AKfycbxPdtJu7-iORTMFyGb0I5xdvtYgacfaRodXpCGHNPwdvciox4xo2FJSBfQvdnzGae_Lxg/exec", "name": "FIVEROX · Дагестан · CRM", "organization": "FIVEROX"});</script><meta name="application-version" content="dagestan-crm-20261117-r14"><style>.geo-selector{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:22px}.geo-selector .meta{font-size:11px}.contact-block{overflow-wrap:anywhere}.toolbar{flex-wrap:wrap}.board{max-width:100%}</style><link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <style>.public-catalog { min-width: 0; padding: 24px clamp(14px, 3vw, 32px) 40px; }
 .public-catalog-header h1 { margin: 0 0 16px; font-size: clamp(1.5rem, 3vw, 2rem); }
 .public-catalog-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px 20px; }
@@ -628,6 +629,7 @@ function write(name, args, key, validate = () => true) {
       if (!validate(result)) throw new Error('CRM_RESPONSE: Ответ о сохранении не подтверждён.');
       lastWriteMilliseconds = performance.now() - started;
       pendingOperations.delete(key);
+      invalidateManagerReport();
       return result;
     } catch (error) {
       if (view !== viewId) throw abandoned;
@@ -988,9 +990,12 @@ async function navigate(next, {fromHistory=false}={}) {
 
 function applyWorkspace(workspace) {
   validateWorkspace(workspace);
+  const initial = !db;
+  if (!initial) invalidateManagerReport();
   db = {...workspace, leads:workspace.leads.map(normalizePilotLead)};
   notice();
   render();
+  if (initial) scheduleManagerReport();
   if (!isPublic(screen)) $('syncStatus').textContent = 'Данные обновлены';
 }
 
@@ -1002,6 +1007,7 @@ function validateWorkspace(workspace) {
 
 function handleAccessChange(error) {
   session = null;
+  managerReportState = null;
   closeManagerGuide();
   viewId += 1;
   db = null;
@@ -1480,6 +1486,30 @@ function managerReport() {
   return managerReportState;
 }
 
+function invalidateManagerReport() {
+  if (!managerReportState) return;
+  Object.assign(managerReportState, {key:null, pending:null, result:null, error:null, preloadedUntil:0});
+}
+
+function managerReportRequest(state) {
+  const request = {period:state.period, staff:state.staff, area:geoScope};
+  if (state.period === 'custom') Object.assign(request, {from:state.from, to:state.to});
+  return request;
+}
+
+function scheduleManagerReport() {
+  if (session?.role !== 'editor' || screen !== 'leads' || navigator.connection?.saveData) return;
+  const view = viewId, area = geoScope, workspace = db;
+  setTimeout(() => {
+    if (view !== viewId || area !== geoScope || workspace !== db || screen !== 'leads' || document.hidden) return;
+    const state = managerReport();
+    if (state.key) return;
+    const request = managerReportRequest(state);
+    state.key = JSON.stringify(request);
+    void loadManagerReport(state, request, true);
+  }, 300);
+}
+
 function reportShare(part, total) {
   return total ? new Intl.NumberFormat('ru-RU', {style:'percent', maximumFractionDigits:1}).format(part / total) : '—';
 }
@@ -1573,17 +1603,25 @@ function managerReportResults(state) {
     </section>`;
 }
 
-async function loadManagerReport(state, request) {
+async function loadManagerReport(state, request, background=false) {
   const pending = {};
   state.pending = pending;
+  const current = () => state === managerReportState && state.view === viewId && state.pending === pending;
   try {
     const result = await crmCall('crmManagerReport', request);
-    if (state !== managerReportState || state.view !== viewId || state.pending !== pending) return;
+    if (!current()) return;
     state.result = result;
     state.options = result.staff;
+    state.preloadedUntil = background && screen !== 'manager-report' ? Date.now() + 30000 : 0;
   } catch (error) {
-    if (error === abandoned || state.pending !== pending) return;
+    if (error === abandoned || !current()) return;
+    if (background && screen !== 'manager-report') {
+      state.key = null;
+      return;
+    }
     state.error = errorText(error) || 'Не удалось загрузить отчёт.';
+  } finally {
+    if (current()) state.pending = null;
   }
   if (screen !== 'manager-report' || state !== managerReportState || state.view !== viewId) return;
   const staff = $('reportStaff');
@@ -1597,14 +1635,14 @@ async function loadManagerReport(state, request) {
 
 function renderManagerReport() {
   const state = managerReport();
-  const request = {period:state.period, staff:state.staff, area:geoScope};
-  if (state.period === 'custom') Object.assign(request, {from:state.from, to:state.to});
+  const request = managerReportRequest(state);
   const key = JSON.stringify(request);
-  if (key !== state.key) {
+  if (key !== state.key || (state.preloadedUntil && state.preloadedUntil <= Date.now())) {
     state.key = key;
     state.result = state.error = null;
     void loadManagerReport(state, request);
   }
+  state.preloadedUntil = 0;
   const staffControl = ['admin','coordinator','owner_viewer'].includes(session.role)
     ? `<label class="report-label">Сотрудник <select id="reportStaff">${reportStaffOptions(state)}</select></label>` : '';
   const dates = state.period === 'custom' ? `
