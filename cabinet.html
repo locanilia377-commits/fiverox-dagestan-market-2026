@@ -23,7 +23,7 @@
 .sidebar{overflow-y:auto;overscroll-behavior:contain}.source-detail a,.public-evidence a,.research-card a{overflow-wrap:anywhere}
 
 @font-face{font-family:Onest;src:url("onest-crm.woff2") format("woff2");font-display:swap}body,button,input,select,textarea{font-family:Onest,Arial,sans-serif}.sidebar{background:#064c40}.btn.primary{background:#087d65}.brand{font-weight:850;letter-spacing:.04em}.brand span{font-size:10px}.scope-note{border-color:#b6daca;background:#edf8f1;color:#1e594c}
-</style><script>window.FIVEROX_PLATFORM_CONFIG=Object.freeze({"pilotEnabled": true, "backendUrl": "https://script.google.com/macros/s/AKfycbxPdtJu7-iORTMFyGb0I5xdvtYgacfaRodXpCGHNPwdvciox4xo2FJSBfQvdnzGae_Lxg/exec", "name": "FIVEROX · Дагестан · CRM", "organization": "FIVEROX"});</script><meta name="application-version" content="dagestan-crm-20261117-r14"><style>.geo-selector{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:22px}.geo-selector .meta{font-size:11px}.contact-block{overflow-wrap:anywhere}.toolbar{flex-wrap:wrap}.board{max-width:100%}</style><link rel="preconnect" href="https://script.google.com" crossorigin>
+</style><script>window.FIVEROX_PLATFORM_CONFIG=Object.freeze({"pilotEnabled": true, "backendUrl": "https://script.google.com/macros/s/AKfycbxPdtJu7-iORTMFyGb0I5xdvtYgacfaRodXpCGHNPwdvciox4xo2FJSBfQvdnzGae_Lxg/exec", "name": "FIVEROX · Дагестан · CRM", "organization": "FIVEROX"});</script><meta name="application-version" content="dagestan-crm-20261117-r15"><style>.geo-selector{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:22px}.geo-selector .meta{font-size:11px}.contact-block{overflow-wrap:anywhere}.toolbar{flex-wrap:wrap}.board{max-width:100%}</style><link rel="preconnect" href="https://script.google.com" crossorigin>
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <style>.public-catalog { min-width: 0; padding: 24px clamp(14px, 3vw, 32px) 40px; }
 .public-catalog-header h1 { margin: 0 0 16px; font-size: clamp(1.5rem, 3vw, 2rem); }
@@ -333,7 +333,7 @@ const endpointPattern=/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+
 const tokenPattern=/^[a-f0-9]{64}\.[a-f0-9]{64}$/;
 const readOnlyMethods=new Set(['crmOpen','crmCardRead','crmManagerReport','crmManagerGuide','crmAssignmentPreview','crmSurveyRead','crmUsers','crmSession','crmWorkspace','crmWorkspaceFresh','crmRead']);
 const sessionLifetime=12*60*60*1000;
-const rpcArity=Object.freeze({crmEmailStart:2,crmEmailVerify:3,crmEnter:3,crmEmailLogout:1,crmUsers:1,crmUserSave:4,crmOpen:1,crmCardRead:2,crmSaveCard:5,crmMoveCard:5,crmManagerGuide:1,crmManagerReport:2,crmAssignmentPreview:2,crmBulkAssign:4,crmSurveyRead:2,crmSurveySave:5,crmSession:1,crmWorkspace:1,crmWorkspaceFresh:1,crmRead:2,crmSaveRead:5,crmMoveRead:5,crmRecordRead:5,crmCreateLead:3,crmItemSave:5});
+const rpcArity=Object.freeze({crmEmailStart:2,crmEmailVerify:3,crmEnter:3,crmEnterCompact:4,crmEmailLogout:1,crmUsers:1,crmUserSave:4,crmOpen:1,crmCardRead:2,crmSaveCard:5,crmMoveCard:5,crmManagerGuide:1,crmManagerReport:2,crmAssignmentPreview:2,crmBulkAssign:4,crmSurveyRead:2,crmSurveySave:5,crmSession:1,crmWorkspace:1,crmWorkspaceFresh:1,crmRead:2,crmSaveRead:5,crmMoveRead:5,crmRecordRead:5,crmCreateLead:3,crmItemSave:5});
 function endpointReady(value){return endpointPattern.test(value||'');}
 function createSheetsClient(backendUrl,{fetchImpl=fetch,onMeasure=()=>{},now=()=>performance.now()}={}){
   return async function call(method,...args){
@@ -346,7 +346,7 @@ function createSheetsClient(backendUrl,{fetchImpl=fetch,onMeasure=()=>{},now=()=
       if(!response.ok)throw new Error('network');
       reply=await response.json();
     }catch{
-      throw new Error(method==='crmEnter'||method==='crmEmailVerify'?'CRM_NETWORK: Ответ на вход не получен. Проверьте соединение. Если код уже использован, запросите новый.':readOnlyMethods.has(method)?'CRM_NETWORK: Не удалось получить данные. Проверьте соединение и повторите загрузку.':'CRM_NETWORK: Ответ сервера не получен. Изменение могло сохраниться. Повторите ту же команду без изменения полей.');
+      throw new Error(['crmEnterCompact','crmEnter','crmEmailVerify'].includes(method)?'CRM_NETWORK: Ответ на вход не получен. Проверьте соединение. Если код уже использован, запросите новый.':readOnlyMethods.has(method)?'CRM_NETWORK: Не удалось получить данные. Проверьте соединение и повторите загрузку.':'CRM_NETWORK: Ответ сервера не получен. Изменение могло сохраниться. Повторите ту же команду без изменения полей.');
     }finally{
       clearTimeout(timer);
       // Method and duration only. Never record body, email, code or token.
@@ -429,7 +429,7 @@ function updateEmailResend(){clearTimeout(emailResendTimer);const delay=emailRes
 
 function showSignIn(message=''){$('appShell').hidden=false;$('main').hidden=true;$('authScreen').hidden=false;$('signInPanel').open=true;resetEmailSignIn();drawNav();$('breadcrumb').textContent='Личный кабинет';$('syncStatus').textContent='Вход в CRM';$('refreshWorkspace').hidden=true;$('signOut').hidden=true;setFormBusy(emailStart,!apiAvailable());accessStatus('signInStatus',message||(!apiAvailable()?'Подключение CRM ещё не завершено.':''),!!message);$('authConnectionNote').hidden=apiAvailable();}
 function endSession(message=''){clearStoredSession(sessionStorageSafe(),config.backendUrl);session=null;$('sheetLink').hidden=true;$('sheetLink').removeAttribute('href');viewId+=1;requestId+=1;db=current=null;pendingOperations.clear();resetClientWrites();closeManagerGuide();managerReportState=null;saving=loading=false;closeCard(true);closeModal(true);$('dialogTitle').textContent='';$('dialogStatus').textContent='';$('main').replaceChildren();$('cardTitle').textContent='Карточка';$('cardMeta').textContent='';$('sidebarCount').textContent='Публичное исследование';$('lastSync').textContent='';$('toast').textContent='';$('toast').classList.remove('show');$('identityEmail').textContent='Личный кабинет';$('identityRole').textContent='Вход';$('avatar').textContent='?';notice();render();if(!isPublic(screen))accessStatus('signInStatus',message,!!message);}
-async function openSession(identity,{persist=true,workspace=null}={}){const display=identity?.email||'';if(!Object.hasOwn(roleLabels,identity?.role)||typeof display!=='string'||!display||typeof identity.token!=='string'||!identity.token)throw new Error('CRM_FORBIDDEN: Доступ не разрешён. Проверьте email и лист Доступы.');session=identity;if(persist)storeSession(sessionStorageSafe(),config.backendUrl,identity);viewId+=1;requestId+=1;db=current=null;resetEmailSignIn();$('authScreen').hidden=true;$('main').hidden=false;$('appShell').hidden=false;$('identityEmail').textContent=display;$('identityRole').textContent=roleLabels[identity.role];$('avatar').textContent=display.slice(0,1).toUpperCase();$('signOut').hidden=false;const sheetUrl=verifiedSheetUrl(identity.sheetUrl);$('sheetLink').hidden=!sheetUrl||identity.role!=='admin';if(sheetUrl)$('sheetLink').href=sheetUrl;$('accessNotice').textContent='Закрытая CRM Дагестана. Права и назначение компаний проверяются сервером при каждом запросе. Сессия — до 12 часов в этой вкладке.';if(workspace)applyWorkspace(workspace);else await loadWorkspace().catch(()=>{});}
+async function openSession(identity,{persist=true,workspace=null,initialReport=null}={}){const display=identity?.email||'';if(!Object.hasOwn(roleLabels,identity?.role)||typeof display!=='string'||!display||typeof identity.token!=='string'||!identity.token)throw new Error('CRM_FORBIDDEN: Доступ не разрешён. Проверьте email и лист Доступы.');session=identity;if(persist)storeSession(sessionStorageSafe(),config.backendUrl,identity);viewId+=1;requestId+=1;db=current=null;resetEmailSignIn();$('authScreen').hidden=true;$('main').hidden=false;$('appShell').hidden=false;$('identityEmail').textContent=display;$('identityRole').textContent=roleLabels[identity.role];$('avatar').textContent=display.slice(0,1).toUpperCase();$('signOut').hidden=false;const sheetUrl=verifiedSheetUrl(identity.sheetUrl);$('sheetLink').hidden=!sheetUrl||identity.role!=='admin';if(sheetUrl)$('sheetLink').href=sheetUrl;$('accessNotice').textContent='Закрытая CRM Дагестана. Права и назначение компаний проверяются сервером при каждом запросе. Сессия — до 12 часов в этой вкладке.';if(workspace)applyWorkspace(workspace,initialReport);else await loadWorkspace().catch(()=>{});}
 
 emailStart.addEventListener('submit',event=>{event.preventDefault();const email=emailStart.elements.email.value.trim();if(email)requestEmailCode(email);});
 resendEmail.addEventListener('click',()=>{if(emailAddress&&Date.now()>=emailResendUntil)requestEmailCode(emailAddress);});
@@ -988,11 +988,16 @@ async function navigate(next, {fromHistory=false}={}) {
   if (!isPublic(screen) && !session && apiAvailable()) await restoreSession();
 }
 
-function applyWorkspace(workspace) {
+function applyWorkspace(workspace, initialReport) {
   validateWorkspace(workspace);
   const initial = !db;
   if (!initial) invalidateManagerReport();
-  db = {...workspace, leads:workspace.leads.map(normalizePilotLead)};
+  const {leadKeys, leads, ...sections} = workspace;
+  const records = leadKeys
+    ? leads.map(row=>Object.fromEntries(leadKeys.map((key,index)=>[key,row[index]])))
+    : leads;
+  db = {...sections, leads:records.map(normalizePilotLead)};
+  if (initialReport) seedManagerReport(initialReport);
   notice();
   render();
   if (initial) scheduleManagerReport();
@@ -1497,6 +1502,15 @@ function managerReportRequest(state) {
   return request;
 }
 
+function seedManagerReport({area, result}) {
+  if (area !== geoScope || !result || session?.role !== 'editor') return;
+  const state = managerReport();
+  state.key = JSON.stringify(managerReportRequest(state));
+  state.result = result;
+  state.options = result.staff;
+  state.preloadedUntil = Date.now() + 30000;
+}
+
 function scheduleManagerReport() {
   if (session?.role !== 'editor' || screen !== 'leads' || navigator.connection?.saveData) return;
   const view = viewId, area = geoScope, workspace = db;
@@ -1760,16 +1774,10 @@ async function verifyEmailAndOpen(event) {
   setFormBusy(emailVerify, true);
   accessStatus('signInStatus', 'Проверяю код и открываю кабинет…');
   try {
-    let result;
-    try {
-      result = await call('crmEnter', ...args);
-    } catch (error) {
-      if (attempt !== emailAttempt || error.message !== 'Неверный запрос к CRM.') throw error;
-      result = await call('crmEmailVerify', ...args);
-    }
+    const result = await enterEmailSession(args, attempt);
     if (attempt !== emailAttempt) return;
-    const {token, session:identity, workspace} = result;
-    await openSession({...identity, token, provider:'email'}, {workspace});
+    const {token, session:identity, workspace, initialReport} = result;
+    await openSession({...identity, token, provider:'email'}, {workspace, initialReport});
   } catch (error) {
     if (attempt === emailAttempt) accessStatus('signInStatus', errorText(error), true);
   } finally {
@@ -1777,6 +1785,17 @@ async function verifyEmailAndOpen(event) {
       checkingEmailCode = false;
       setFormBusy(emailVerify, false);
       updateEmailResend();
+    }
+  }
+}
+
+async function enterEmailSession(args, attempt) {
+  const attempts = [['crmEnterCompact',[...args,geoScope]], ['crmEnter',args], ['crmEmailVerify',args]];
+  for (const [method, params] of attempts) {
+    try {
+      return await call(method,...params);
+    } catch (error) {
+      if (method === 'crmEmailVerify' || attempt !== emailAttempt || error.message !== 'Неверный запрос к CRM.') throw error;
     }
   }
 }
