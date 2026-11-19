@@ -23,7 +23,7 @@
 .sidebar{overflow-y:auto;overscroll-behavior:contain}.source-detail a,.public-evidence a,.research-card a{overflow-wrap:anywhere}
 
 @font-face{font-family:Onest;src:url("onest-crm.woff2") format("woff2");font-display:swap}body,button,input,select,textarea{font-family:Onest,Arial,sans-serif}.sidebar{background:#064c40}.btn.primary{background:#087d65}.brand{font-weight:850;letter-spacing:.04em}.brand span{font-size:10px}.scope-note{border-color:#b6daca;background:#edf8f1;color:#1e594c}
-</style><script>window.FIVEROX_PLATFORM_CONFIG=Object.freeze({"pilotEnabled": true, "backendUrl": "https://script.google.com/macros/s/AKfycbxPdtJu7-iORTMFyGb0I5xdvtYgacfaRodXpCGHNPwdvciox4xo2FJSBfQvdnzGae_Lxg/exec", "name": "FIVEROX · Дагестан · CRM", "organization": "FIVEROX"});</script><meta name="application-version" content="dagestan-crm-20261117-r15"><style>.geo-selector{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:22px}.geo-selector .meta{font-size:11px}.contact-block{overflow-wrap:anywhere}.toolbar{flex-wrap:wrap}.board{max-width:100%}</style><link rel="preconnect" href="https://script.google.com" crossorigin>
+</style><script>window.FIVEROX_PLATFORM_CONFIG=Object.freeze({"pilotEnabled": true, "backendUrl": "https://script.google.com/macros/s/AKfycbxPdtJu7-iORTMFyGb0I5xdvtYgacfaRodXpCGHNPwdvciox4xo2FJSBfQvdnzGae_Lxg/exec", "name": "FIVEROX · Дагестан · CRM", "organization": "FIVEROX"});</script><meta name="application-version" content="dagestan-crm-20261117-r15-email-recovery-20261119-mail-delivery-20261119-r2"><style>.geo-selector{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:22px}.geo-selector .meta{font-size:11px}.contact-block{overflow-wrap:anywhere}.toolbar{flex-wrap:wrap}.board{max-width:100%}</style><link rel="preconnect" href="https://script.google.com" crossorigin>
 <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
 <style>.public-catalog { min-width: 0; padding: 24px clamp(14px, 3vw, 32px) 40px; }
 .public-catalog-header h1 { margin: 0 0 16px; font-size: clamp(1.5rem, 3vw, 2rem); }
@@ -268,7 +268,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
         <label>Код из письма<input name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" required></label>
         <div class="access-actions">
           <button type="submit" class="btn primary">Войти по коду</button>
-          <button type="button" id="resendEmail" class="btn">Отправить код ещё раз</button>
+          <button type="button" id="resendEmail" class="btn">Запросить новый код</button>
           <button type="button" id="changeEmail" class="text-button">Другой адрес</button>
         </div>
       </form>
@@ -333,22 +333,54 @@ const endpointPattern=/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+
 const tokenPattern=/^[a-f0-9]{64}\.[a-f0-9]{64}$/;
 const readOnlyMethods=new Set(['crmOpen','crmCardRead','crmManagerReport','crmManagerGuide','crmCoordinatorGuide','crmAssignmentPreview','crmSurveyRead','crmUsers','crmSession','crmWorkspace','crmWorkspaceFresh','crmRead']);
 const sessionLifetime=12*60*60*1000;
-const rpcArity=Object.freeze({crmEmailStart:2,crmEmailVerify:3,crmEnter:3,crmEnterCompact:4,crmEmailLogout:1,crmUsers:1,crmUserSave:4,crmOpen:1,crmCardRead:2,crmSaveCard:5,crmMoveCard:5,crmManagerGuide:1,crmCoordinatorGuide:1,crmManagerReport:2,crmAssignmentPreview:2,crmBulkAssign:4,crmSurveyRead:2,crmSurveySave:5,crmSession:1,crmWorkspace:1,crmWorkspaceFresh:1,crmRead:2,crmSaveRead:5,crmMoveRead:5,crmRecordRead:5,crmCreateLead:3,crmItemSave:5});
+const rpcArity=Object.freeze({crmEmailStart:2,crmEmailStartV2:3,crmEmailDeliveryReport:2,crmEmailVerify:3,crmEnter:3,crmEnterCompact:4,crmEmailLogout:1,crmUsers:1,crmUserSave:4,crmOpen:1,crmCardRead:2,crmSaveCard:5,crmMoveCard:5,crmManagerGuide:1,crmCoordinatorGuide:1,crmManagerReport:2,crmAssignmentPreview:2,crmBulkAssign:4,crmSurveyRead:2,crmSurveySave:5,crmSession:1,crmWorkspace:1,crmWorkspaceFresh:1,crmRead:2,crmSaveRead:5,crmMoveRead:5,crmRecordRead:5,crmCreateLead:3,crmItemSave:5});
 function endpointReady(value){return endpointPattern.test(value||'');}
-function createSheetsClient(backendUrl,{fetchImpl=fetch,onMeasure=()=>{},now=()=>performance.now()}={}){
+function createSheetsClient(backendUrl, {
+  fetchImpl = fetch, onMeasure = () => {}, now = () => performance.now(),
+  pause = ms => new Promise(resolve => setTimeout(resolve, ms)),
+} = {}) {
   return async function call(method,...args){
     if(!endpointReady(backendUrl))throw new Error('CRM_UNAVAILABLE: Тестовая CRM ещё подключается.');
     if(!Object.hasOwn(rpcArity,method)||args.length!==rpcArity[method])throw new Error('CRM_REQUEST: Неизвестная команда CRM.');
-    const started=now(),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),35000);
+    const started = now();
+    const options = {
+      method:'POST', mode:'cors', credentials:'omit', referrerPolicy:'no-referrer',
+      cache:'no-store', headers:{'Content-Type':'text/plain;charset=UTF-8'}, body:JSON.stringify({method,args}),
+    };
+    async function send(timeout) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await fetchImpl(backendUrl, {...options, signal:controller.signal});
+        if (!response.ok) {
+          const error = new Error('HTTP ' + response.status);
+          error.retryable = [408, 500, 502, 503, 504].includes(response.status);
+          throw error;
+        }
+        return await response.json();
+      } finally {
+        clearTimeout(timer);
+      }
+    }
     let reply;
-    try{
-      const response=await fetchImpl(backendUrl,{method:'POST',mode:'cors',credentials:'omit',referrerPolicy:'no-referrer',cache:'no-store',signal:controller.signal,headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify({method,args})});
-      if(!response.ok)throw new Error('network');
-      reply=await response.json();
+    try {
+      if (!['crmEmailStart','crmEmailStartV2'].includes(method)) {
+        reply = await send(35000);
+      } else {
+        try {
+          reply = await send(12000);
+        } catch (error) {
+          // Replay only the same start request within the server's 90 s mail cooldown.
+          // No retry of code verification or writes that have no server receipt.
+          if (!error.retryable && !['AbortError', 'TypeError', 'SyntaxError'].includes(error.name)) throw error;
+          await pause(750);
+          if (now() - started >= 30000) throw error;
+          reply = await send(25000);
+        }
+      }
     }catch{
       throw new Error(['crmEnterCompact','crmEnter','crmEmailVerify'].includes(method)?'CRM_NETWORK: Ответ на вход не получен. Проверьте соединение. Если код уже использован, запросите новый.':readOnlyMethods.has(method)?'CRM_NETWORK: Не удалось получить данные. Проверьте соединение и повторите загрузку.':'CRM_NETWORK: Ответ сервера не получен. Изменение могло сохраниться. Повторите ту же команду без изменения полей.');
     }finally{
-      clearTimeout(timer);
       // Method and duration only. Never record body, email, code or token.
       onMeasure({method,milliseconds:Math.max(0,Math.round(now()-started))});
     }
@@ -425,7 +457,15 @@ function sessionStorageSafe(){try{return window.sessionStorage;}catch{return nul
 async function call(name,...args){if(!apiAvailable())throw new Error('CRM_UNAVAILABLE: CRM ещё подключается.');return rpc(name,...args);}
 async function crmCall(name,...args){const identity=session,view=viewId;try{const result=await call(name,identity?.token??'',...args);if(view!==viewId)throw abandoned;return result;}catch(error){if(view!==viewId)throw abandoned;if(identity&&errorCode(error)==='CRM_AUTH_REQUIRED'){endSession(errorText(error));throw abandoned;}if(identity&&errorCode(error)==='CRM_FORBIDDEN'){handleAccessChange(error);throw abandoned;}throw error;}}
 
-function updateEmailResend(){clearTimeout(emailResendTimer);const delay=emailResendUntil-Date.now();resendEmail.disabled=delay>0;if(delay>0)emailResendTimer=setTimeout(updateEmailResend,delay);}
+function updateEmailResend() {
+  clearTimeout(emailResendTimer);
+  const remaining = Math.max(0, emailResendUntil - Date.now());
+  resendEmail.disabled = remaining > 0 || checkingEmailCode;
+  resendEmail.textContent = remaining > 0
+    ? 'Новый код через ' + Math.ceil(remaining / 1000) + ' с'
+    : 'Запросить новый код';
+  if (remaining > 0) emailResendTimer = setTimeout(updateEmailResend, remaining % 1000 || 1000);
+}
 
 function showSignIn(message=''){$('appShell').hidden=false;$('main').hidden=true;$('authScreen').hidden=false;$('signInPanel').open=true;resetEmailSignIn();drawNav();$('breadcrumb').textContent='Личный кабинет';$('syncStatus').textContent='Вход в CRM';$('refreshWorkspace').hidden=true;$('signOut').hidden=true;setFormBusy(emailStart,!apiAvailable());accessStatus('signInStatus',message||(!apiAvailable()?'Подключение CRM ещё не завершено.':''),!!message);$('authConnectionNote').hidden=apiAvailable();}
 function endSession(message=''){clearStoredSession(sessionStorageSafe(),config.backendUrl);session=null;$('sheetLink').hidden=true;$('sheetLink').removeAttribute('href');viewId+=1;requestId+=1;db=current=null;pendingOperations.clear();resetClientWrites();closeManagerGuide();managerReportState=null;saving=loading=false;closeCard(true);closeModal(true);$('dialogTitle').textContent='';$('dialogStatus').textContent='';$('main').replaceChildren();$('cardTitle').textContent='Карточка';$('cardMeta').textContent='';$('sidebarCount').textContent='Публичное исследование';$('lastSync').textContent='';$('toast').textContent='';$('toast').classList.remove('show');$('identityEmail').textContent='Личный кабинет';$('identityRole').textContent='Вход';$('avatar').textContent='?';notice();render();if(!isPublic(screen))accessStatus('signInStatus',message,!!message);}
@@ -560,8 +600,47 @@ function renderAccess(){
   if(session?.role!=='admin')return empty('Доступ ограничен','Сотрудников добавляет владелец.');
   const actions = btn('+ Добавить сотрудника','new-user','','primary') + btn('Массовое назначение','bulk-assignment');
   return heading('Доступ сотрудников','Добавление в реестр не отправляет приглашение. Передайте сотруднику адрес кабинета.',actions)+
-    `<section class="box table-box">${table(['Сотрудник','Роль','Доступ','Примечание',''],(db.users||[]).map(u=>[`${esc(u.name||u.email)}<div class="sub">${esc(u.email)}</div>`,esc(roleLabels[u.role]),pill(u.active?'Включён':'Отключён',u.active?'green':'red'),esc(u.note||'—'),u.owner?'Владелец':btn('Изменить','edit-user',`data-email="${esc(u.email)}"`,'small')]))}</section><div class="note">Собственник видит всю рабочую базу в режиме просмотра. Координатор ведёт всю базу, назначает ответственных и оформляет передачи дилерам. Менеджер ведёт свои карточки и добавляет новые на себя. Доступами управляет владелец.</div>`;
+    `<section class="box table-box">${table(['Сотрудник','Роль','Доступ','Примечание',''],(db.users||[]).map(u=>[`${esc(u.name||u.email)}<div class="sub">${esc(u.email)}</div>`,esc(roleLabels[u.role]),pill(u.active?'Включён':'Отключён',u.active?'green':'red'),esc(u.note||'—'),u.owner?'Владелец':btn('Изменить','edit-user',`data-email="${esc(u.email)}"`,'small')]))}</section><div class="note">Собственник видит всю рабочую базу в режиме просмотра. Координатор ведёт всю базу, назначает ответственных и оформляет передачи дилерам. Менеджер ведёт свои карточки и добавляет новые на себя. Доступами управляет владелец.</div>
+    <section class="box table-box">
+      <h2>Проверка отправки кода</h2>
+      <form id="mailDeliveryCheck" class="access-form">
+        <label>Номер запроса<input name="reference" maxlength="12" pattern="[A-Fa-f0-9]{12}" required></label>
+        <div><button class="btn" type="submit">Проверить отправку</button></div>
+        <p id="mailDeliveryResult" class="meta" role="status"></p>
+      </form>
+    </section>`;
 }
+
+$('main').addEventListener('submit', async event => {
+  const form = event.target;
+  if (form.id !== 'mailDeliveryCheck') return;
+  event.preventDefault();
+  if (session?.role !== 'admin') return;
+  const reference = form.elements.reference.value.trim().toUpperCase();
+  const output = $('mailDeliveryResult');
+  const reasons = {
+    submitted:'Google принял письмо к отправке. Доставку подтверждает получатель.',
+    ineligible:'Для этого адреса нет активного доступа. Сверьте email и роль.',
+    throttled:'Сработал лимит отправки. Проверьте время предыдущего запроса.',
+    quota_exhausted:'Исчерпана почтовая квота Google.',
+    not_configured:'Отправка кодов в этом кабинете отключена.',
+    transport_uncertain:'Сервис не подтвердил отправку. Если письмо пришло, код остаётся действительным.',
+    malformed_address:'Адрес электронной почты введён неверно.',
+    invalid_browser_proof:'Проверка начала входа не пройдена. Откройте кабинет заново.',
+    internal_failure:'Сервис отправки завершил запрос с ошибкой.',
+  };
+  output.textContent = 'Проверяю отправку…';
+  try {
+    const result = await crmCall('crmEmailDeliveryReport', reference);
+    if (!form.isConnected) return;
+    const time = result.attempt && shortTimestamp(result.attempt.checkedAt);
+    const verdict = reasons[result.attempt?.reason] || 'Запись о запросе недоступна. Попросите свежий номер.';
+    output.textContent = (time ? time + ' · ' : '') + verdict + ' Осталось отправок Google: ' + result.googleRemaining + '.';
+  } catch (error) {
+    if (error !== abandoned && form.isConnected) output.textContent = errorText(error);
+  }
+});
+
 function assignableUsers(){
   return session?.role==='admin'
     ? (db.users||[]).filter(u=>u.owner||u.active&&['coordinator','editor'].includes(u.role))
@@ -1762,35 +1841,78 @@ function resetEmailSignIn() {
   updateEmailResend();
 }
 
+// Browser form navigation can reach Apps Script when cross-origin fetch fails.
+// The server deduplicates this request using the same proof and operation.
+function retryEmailByForm(email, proof, operation) {
+  if (!endpointReady(config.backendUrl)) return;
+  const target = document.createElement('iframe');
+  target.name = 'crm-mail-' + operation;
+  target.hidden = true;
+  target.setAttribute('sandbox', '');
+  target.referrerPolicy = 'no-referrer';
+  const form = document.createElement('form');
+  form.hidden = true;
+  form.method = 'POST';
+  form.action = config.backendUrl;
+  form.target = target.name;
+  form.rel = 'noreferrer';
+  for (const [name, value] of Object.entries({action:'request-email-code', email, proof, operation})) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+    form.append(input);
+  }
+  document.body.append(target, form);
+  try { form.submit(); } finally { form.remove(); setTimeout(() => target.remove(), 60000); }
+}
+
 async function requestEmailCode(email) {
   if (checkingEmailCode || Date.now() < emailResendUntil) return;
   const attempt = ++emailAttempt;
-  emailAddress = email;
-  emailProof = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
+  const random = size => Array.from(crypto.getRandomValues(new Uint8Array(size)), byte => byte.toString(16).padStart(2, '0')).join('');
+  if (email !== emailAddress || !emailProof) {
+    emailAddress = email;
+    emailProof = random(32);
+    emailVerify.reset();
+  }
+  const operation = random(16);
+  const requestedAt = Date.now();
   emailResendUntil = Date.now() + 90000;
-  emailVerify.reset();
   $('emailDestination').textContent = 'Адрес: ' + email;
   emailStart.hidden = true;
   emailVerify.hidden = false;
   updateEmailResend();
   emailVerify.elements.code.focus();
-  accessStatus('signInStatus', 'Запрашиваю код. Введите его, как только придёт письмо.');
+  const proof = emailProof;
+  const input = new TextEncoder().encode(JSON.stringify([proof, operation]));
+  const digest = await crypto.subtle.digest('SHA-256', input);
+  const reference = Array.from(new Uint8Array(digest).slice(0, 6), byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+  const referenceNote = ' Номер запроса ' + reference + '.';
+  if (attempt !== emailAttempt || checkingEmailCode) return;
+  accessStatus('signInStatus', 'Запрашиваю код. Если письмо уже пришло, введите код из него.' + referenceNote);
   try {
-    await call('crmEmailStart', email, emailProof);
+    const result = await call('crmEmailStartV2', email, proof, operation);
     if (attempt !== emailAttempt || checkingEmailCode) return;
-    accessStatus('signInStatus', 'Запрос на код принят. Проверьте «Входящие» и «Спам». Код действует 10 минут.');
-  } catch {
+    if (result?.reference !== reference) throw new Error('Ответ не соответствует запросу.');
+    accessStatus('signInStatus', 'Код отправляется только на активный рабочий адрес. Проверьте «Входящие» и «Спам».' + referenceNote);
+  } catch (error) {
     if (attempt !== emailAttempt || checkingEmailCode) return;
-    accessStatus('signInStatus', 'Ответ на запрос кода пока не получен. Если письмо пришло, введите код.', true);
+    if (Date.now() - requestedAt < 60000 && /^CRM_NETWORK:/.test(error.message)) {
+      try { retryEmailByForm(email, proof, operation); } catch { /* Manual retry stays available. */ }
+    }
+    accessStatus('signInStatus', 'Проверьте почту. Если письмо пришло, код можно ввести сейчас. Если письма нет, запросите новый код после отсчёта.' + referenceNote);
   }
 }
 
 async function verifyEmailAndOpen(event) {
   event.preventDefault();
   if (checkingEmailCode || !emailAddress || !emailProof) return;
-  const attempt = emailAttempt;
+  // Stop a late start response from overwriting the result of code verification.
+  const attempt = ++emailAttempt;
   const args = [emailAddress, emailProof, emailVerify.elements.code.value.trim()];
   checkingEmailCode = true;
+  updateEmailResend();
   setFormBusy(emailVerify, true);
   accessStatus('signInStatus', 'Проверяю код и открываю кабинет…');
   try {
